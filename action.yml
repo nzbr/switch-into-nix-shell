@@ -10,6 +10,10 @@ inputs:
     description: 'Whether to install Nix. Set to false if Nix is already installed.'
     required: false
     default: 'true'
+  pure_env:
+    description: 'Whether to use a pure nix environment.'
+    required: false
+    default: 'false'
 runs:
   using: 'composite'
   steps:
@@ -23,32 +27,39 @@ runs:
         set -xe
 
         # Function to save environment variables to a file
-        save_env() {
+        action_sed="$(which sed)"
+        action_sort="$(which sort)"
+        action_save_env() {
           compgen -e | while read -r var; do
             value="${!var}"
             # Replace newlines with \n for comparison
-            escaped_value=$(printf '%s' "$value" | sed ':a;N;$!ba;s/\n/\\n/g')
+            escaped_value=$(printf '%s' "$value" | $action_sed ':a;N;$!ba;s/\n/\\n/g')
             echo "${var}=${escaped_value}"
-          done | sort > "$1"
+          done | $action_sort > "$1"
         }
 
-        before_env=$(mktemp)
-        after_env=$(mktemp)
-        diff_env=$(mktemp)
+        action_before_env=$(mktemp)
+        action_after_env=$(mktemp)
+        action_diff_env=$(mktemp)
 
         # Save initial environment
-        save_env "$before_env"
+        action_save_env "$action_before_env"
 
         # Load Nix environment
-        nix_dev_env_script=$(mktemp)
-        nix print-dev-env ${{ inputs.nix_args }} > "$nix_dev_env_script"
-        source "$nix_dev_env_script"
+        action_nix_dev_env_script=$(mktemp)
+        nix print-dev-env ${{ inputs.nix_args }} > "$action_nix_dev_env_script"
+         if [[ '${{ inputs.pure_env }}' == 'true' ]]; then
+          compgen -e | grep -v '^action_' | while read -r var; do
+            unset "$var"
+          done
+        fi
+        source "$action_nix_dev_env_script"
 
         # Save environment after loading Nix
-        save_env "$after_env"
+        action_save_env "$action_after_env"
 
         # Find differences
-        diff "$before_env" "$after_env" | grep '^>' | sed 's/^> //' > "$diff_env" || true
+        diff "$action_before_env" "$action_after_env" | grep '^>' | sed 's/^> //' > "$action_diff_env" || true
 
         # Add changed variables to GITHUB_ENV
         while IFS='=' read -r name value; do
@@ -58,10 +69,10 @@ runs:
           echo "${name}<<EOF" >> "$GITHUB_ENV"
           echo "$unescaped_value" >> "$GITHUB_ENV"
           echo "EOF" >> "$GITHUB_ENV"
-        done < "$diff_env"
+        done < "$action_diff_env"
 
         echo "Environment variables added to GITHUB_ENV:"
-        cat "$diff_env"
+        cat "$action_diff_env"
 
 branding:
   icon: 'terminal'
