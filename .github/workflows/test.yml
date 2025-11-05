@@ -41,12 +41,18 @@ jobs:
           fi
           echo "${{ steps.vars.outputs.TEST_HOST_PACKAGE }} is available outside of nix shell"
 
+      - name: Set a test variable
+        run:
+          echo "TEST_ENV_KEEP=kept-var" >> $GITHUB_ENV
+
       - name: Switch into Nix Shell
         uses: ./
         with:
           nix_args: ''
           install_nix: 'true'
           pure_env: "${{ matrix.pure_env == 'pure' && 'true' || 'false' }}"
+          env_keep: 'TEST_ENV_KEEP'
+          bin_keep: '/usr/bin/docker'
 
       - name: Verify Environment Variables
         run: |
@@ -80,3 +86,27 @@ jobs:
             exit 1
           fi
           echo "${{ steps.vars.outputs.TEST_HOST_PACKAGE }} is ${{ matrix.pure_env == 'pure' && 'not ' || '' }}available in the nix shell"
+
+      - name: GITHUB_ variables should still be set
+        run: |
+          if [[ $GITHUB_ACTIONS != 'true' ]]; then
+            echo "GITHUB_ variables should still be set"
+            exit 1
+          fi
+          echo "GITHUB_ variables are still set"
+
+      - name: Variables specified in env_keep should still be set
+        run: |
+          if [[ $TEST_ENV_KEEP != 'kept-var' ]]; then
+            echo "TEST_ENV_KEEP should still be set"
+            exit 1
+          fi
+          echo "TEST_ENV_KEEP is still set"
+
+      - name: Binaries specified in bin_keep should still be available
+        run: |
+          if ! command -v docker; then
+            echo "docker should still be available"
+            exit 1
+          fi
+          echo "docker is still available"

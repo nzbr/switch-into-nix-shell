@@ -14,6 +14,15 @@ inputs:
     description: 'Whether to use a pure nix environment.'
     required: false
     default: 'false'
+  env_keep:
+    description: 'Environment variables to keep in the pure nix shell (in addition to the GITHUB_ and RUNNER_ variables). Space separated'
+    required: false
+    default: ''
+  bin_keep:
+    description: "Individual binaries or directories to be kept in the pure nix shell's path. Space separated"
+    required: false
+    default: ''
+
 runs:
   using: 'composite'
   steps:
@@ -73,6 +82,24 @@ runs:
           echo "EOF" >> "$GITHUB_ENV"
         done < "$action_diff_env"
 
+        # Keep environment variables
+        for var in CI $(compgen -e | grep -E '^GITHUB_') $(compgen -e | grep -E '^RUNNER_') ${{ inputs.env_keep }}; do
+          echo "${var}<<EOF" >> "$GITHUB_ENV"
+          echo "${!var}" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+        done
+
+        # Keep binaries
+        action_bin_path="$(mktemp -d)"
+        for path in ${{ inputs.bin_keep }} "$action_bin_path"; do
+          if [ -d "$path" ]; then
+            echo "Adding directory $path to PATH"
+            sed -i -E "/PATH<<EOF/{n;s|^|$path:|}" "$GITHUB_ENV"
+          elif [ -f "$path" ]; then
+            echo "Adding file $path to PATH"
+            ln -s "$path" "$action_bin_path/"
+          fi
+        done
 
 branding:
   icon: 'terminal'
