@@ -26,46 +26,42 @@ runs:
       run: |
         set -e
 
-        # Function to save environment variables to a file
-        action_sed="$(which sed)"
-        action_sort="$(which sort)"
-        action_save_env() {
-          compgen -e | while read -r var; do
-            value="${!var}"
-            # Replace newlines with \n for comparison
-            escaped_value=$(printf '%s' "$value" | $action_sed ':a;N;$!ba;s/\n/\\n/g')
-            echo "${var}=${escaped_value}"
-          done | $action_sort > "$1"
-        }
-
+        action_save_env=$(mktemp)
         action_before_env=$(mktemp)
         action_after_env=$(mktemp)
         action_diff_env=$(mktemp)
 
+        cat - <<EOF >"$action_save_env"
+          #!/usr/bin/env bash
+          env | grep -E "^[a-zA-Z_][a-zA-Z0-9_]+=" | cut -d= -f1 | while read -r var; do
+            value="\${!var}"
+            # Replace newlines with \n for comparison
+            escaped_value=\$(printf '%s' "\$value" | "$(which sed)" ':a;N;\$!ba;s/\\n/\\\\n/g')
+            echo "\${var}=\${escaped_value}"
+          done | "$(which sort)" > "\$1"
+        EOF
+        chmod +x $action_save_env
+
         # Save initial environment
-        action_save_env "$action_before_env"
+        "$action_save_env" "$action_before_env"
+        echo -e "\nOriginal environment variables"
+        cat "$action_before_env"
+        echo ""
 
-        # Load Nix environment
-        action_nix_dev_env_script=$(mktemp)
-        nix print-dev-env ${{ inputs.nix_args }} > "$action_nix_dev_env_script"
-         if [[ '${{ inputs.pure_env }}' == 'true' ]]; then
-          compgen -e | grep -v '^action_' | while read -r var; do
-            echo "Unsetting $var"
-            unset "$var"
-          done
-        fi
-        source "$action_nix_dev_env_script"
-
-        # Save environment after loading Nix
-        action_save_env "$action_after_env"
+        # Save environment after loading Nix shell
+        nix develop ${{ inputs.nix_args }} ${{ inputs.pure_env == 'true' && '--ignore-environment' || '' }} --command "$action_save_env" "$action_after_env"
+        echo -e "\nNix environment variables"
+        cat "$action_after_env"
+        echo ""
 
         # Unset changed variables from GITHUB_ENV
-        diff "$action_before_env" "$action_after_env" | grep '^<' | sed -E 's/< ([^=]+).*/\1=""/' | tee -a "$GITHUB_ENV" || true
+        diff "$action_before_env" "$action_after_env" | grep '^<' | sed -E 's/< ([^=]+).*/\1=""/' >> "$GITHUB_ENV" || true
 
         # Find differences
-        diff "$action_before_env" "$action_after_env" | grep '^>' | sed 's/^> //' | tee "$action_diff_env" || true
+        diff "$action_before_env" "$action_after_env" | grep '^>' | sed 's/^> //' > "$action_diff_env" || true
 
         # Add changed variables to GITHUB_ENV
+        echo -e "\nSetting variables"
         while IFS='=' read -r name value; do
           echo "$name=$value"
 
@@ -76,6 +72,7 @@ runs:
           echo "$unescaped_value" >> "$GITHUB_ENV"
           echo "EOF" >> "$GITHUB_ENV"
         done < "$action_diff_env"
+
 
 branding:
   icon: 'terminal'

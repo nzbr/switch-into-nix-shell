@@ -6,10 +6,6 @@ on:
       - main
   pull_request:
 
-env:
-  TEST_NIX_PACKAGE: 'hello'
-  TEST_HOST_PACKAGE: 'perl'
-
 jobs:
   test-action:
     runs-on: ubuntu-latest
@@ -20,24 +16,30 @@ jobs:
           - 'impure'
 
     steps:
+      - name: Set workflow variables
+        id: vars
+        run: |
+          echo "TEST_NIX_PACKAGE=hello" >> $GITHUB_OUTPUT
+          echo "TEST_HOST_PACKAGE=perl" >> $GITHUB_OUTPUT
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Test that ${{ env.TEST_NIX_PACKAGE }} is not available outside of nix shell
+      - name: Test that ${{ steps.vars.outputs.TEST_NIX_PACKAGE }} is not available outside of nix shell
         run: |
-          if command -v ${{ env.TEST_NIX_PACKAGE }}; then
-            echo "'${{ env.TEST_NIX_PACKAGE }}' command should not be available outside of nix shell"
+          if command -v ${{ steps.vars.outputs.TEST_NIX_PACKAGE }}; then
+            echo "'${{ steps.vars.outputs.TEST_NIX_PACKAGE }}' command should not be available outside of nix shell"
             exit 1
           fi
-          echo "'${{ env.TEST_NIX_PACKAGE }}' command is not available outside of nix shell"
+          echo "'${{ steps.vars.outputs.TEST_NIX_PACKAGE }}' command is not available outside of nix shell"
 
-      - name: ${{ env.TEST_HOST_PACKAGE }} should be available outside of nix shell
+      - name: ${{ steps.vars.outputs.TEST_HOST_PACKAGE }} should be available outside of nix shell
         run: |
-          if ! command -v ${{ env.TEST_HOST_PACKAGE }}; then
-            echo "${{ env.TEST_HOST_PACKAGE }} should be available outside of nix shell"
+          if ! command -v ${{ steps.vars.outputs.TEST_HOST_PACKAGE }}; then
+            echo "${{ steps.vars.outputs.TEST_HOST_PACKAGE }} should be available outside of nix shell"
             exit 1
           fi
-          echo "${{ env.TEST_HOST_PACKAGE }} is available outside of nix shell"
+          echo "${{ steps.vars.outputs.TEST_HOST_PACKAGE }} is available outside of nix shell"
 
       - name: Switch into Nix Shell
         uses: ./
@@ -62,19 +64,19 @@ jobs:
 
       - name: Test Nix Package Availability
         run: |
-          echo "Checking if ${{ env.TEST_NIX_PACKAGE }} command is available..."
-          if ! command -v ${{ env.TEST_NIX_PACKAGE }}; then
-            echo "'${{ env.TEST_NIX_PACKAGE }}' command is not available"
+          echo "Checking if ${{ steps.vars.outputs.TEST_NIX_PACKAGE }} command is available..."
+          if ! command -v ${{ steps.vars.outputs.TEST_NIX_PACKAGE }}; then
+            echo "'${{ steps.vars.outputs.TEST_NIX_PACKAGE }}' command is not available"
             exit 1
           fi
-          echo "'${{ env.TEST_NIX_PACKAGE }}' command is available"
+          echo "'${{ steps.vars.outputs.TEST_NIX_PACKAGE }}' command is available"
           echo "Running 'hello' command:"
-          ${{ env.TEST_NIX_PACKAGE }}
+          ${{ steps.vars.outputs.TEST_NIX_PACKAGE }}
 
-      - name: ${{ env.TEST_HOST_PACKAGE }} should ${{ matrix.pure_env == 'pure' && 'not ' || '' }}be available in the nix shell
+      - name: ${{ steps.vars.outputs.TEST_HOST_PACKAGE }} should ${{ matrix.pure_env == 'pure' && 'not ' || '' }}be available in the nix shell
         run: |
-          if ${{ matrix.pure_env == 'impure' && '!' || ''}} command -v ${{ env.TEST_HOST_PACKAGE }}; then
-            echo "${{ env.TEST_HOST_PACKAGE }} should ${{ matrix.pure_env == 'pure' && 'not ' || '' }}be available in the nix shell"
+          if ${{ matrix.pure_env == 'impure' && '!' || ''}} command -v ${{ steps.vars.outputs.TEST_HOST_PACKAGE }}; then
+            echo "${{ steps.vars.outputs.TEST_HOST_PACKAGE }} should ${{ matrix.pure_env == 'pure' && 'not ' || '' }}be available in the nix shell"
             exit 1
           fi
-          echo "${{ env.TEST_HOST_PACKAGE }} is ${{ matrix.pure_env == 'pure' && 'not ' || '' }}available in the nix shell"
+          echo "${{ steps.vars.outputs.TEST_HOST_PACKAGE }} is ${{ matrix.pure_env == 'pure' && 'not ' || '' }}available in the nix shell"
