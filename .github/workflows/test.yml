@@ -6,19 +6,45 @@ on:
       - main
   pull_request:
 
+env:
+  TEST_NIX_PACKAGE: 'hello'
+  TEST_HOST_PACKAGE: 'perl'
+
 jobs:
   test-action:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pure_env:
+          - 'pure'
+          - 'impure'
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Test that ${{ env.TEST_NIX_PACKAGE }} is not available outside of nix shell
+        run: |
+          if command -v ${{ env.TEST_NIX_PACKAGE }}; then
+            echo "'${{ env.TEST_NIX_PACKAGE }}' command should not be available outside of nix shell"
+            exit 1
+          fi
+          echo "'${{ env.TEST_NIX_PACKAGE }}' command is not available outside of nix shell"
+
+      - name: ${{ env.TEST_HOST_PACKAGE }} should be available outside of nix shell
+        run: |
+          if ! command -v ${{ env.TEST_HOST_PACKAGE }}; then
+            echo "${{ env.TEST_HOST_PACKAGE }} should be available outside of nix shell"
+            exit 1
+          fi
+          echo "${{ env.TEST_HOST_PACKAGE }} is available outside of nix shell"
 
       - name: Switch into Nix Shell
         uses: ./
         with:
           nix_args: ''
           install_nix: 'true'
+          pure_env: "${{ matrix.pure_env == 'pure' && 'true' || 'false' }}"
 
       - name: Verify Environment Variables
         run: |
@@ -36,11 +62,19 @@ jobs:
 
       - name: Test Nix Package Availability
         run: |
-          echo "Checking if 'hello' command is available..."
-          if ! command -v hello >/dev/null; then
-            echo "'hello' command is not available"
+          echo "Checking if ${{ env.TEST_NIX_PACKAGE }} command is available..."
+          if ! command -v ${{ env.TEST_NIX_PACKAGE }}; then
+            echo "'${{ env.TEST_NIX_PACKAGE }}' command is not available"
             exit 1
           fi
-          echo "'hello' command is available"
+          echo "'${{ env.TEST_NIX_PACKAGE }}' command is available"
           echo "Running 'hello' command:"
-          hello
+          ${{ env.TEST_NIX_PACKAGE }}
+
+      - name: ${{ env.TEST_HOST_PACKAGE }} should ${{ matrix.pure_env == 'pure' && 'not ' || '' }}be available in the nix shell
+        run: |
+          if ${{ matrix.pure_env == 'impure' && '!' || ''}} command -v ${{ env.TEST_HOST_PACKAGE }}; then
+            echo "${{ env.TEST_HOST_PACKAGE }} should ${{ matrix.pure_env == 'pure' && 'not ' || '' }}be available in the nix shell"
+            exit 1
+          fi
+          echo "${{ env.TEST_HOST_PACKAGE }} is ${{ matrix.pure_env == 'pure' && 'not ' || '' }}available in the nix shell"
