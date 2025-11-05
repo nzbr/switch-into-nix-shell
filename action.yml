@@ -24,7 +24,7 @@ runs:
     - name: Switch into Nix Shell
       shell: bash
       run: |
-        set -xe
+        set -e
 
         # Function to save environment variables to a file
         action_sed="$(which sed)"
@@ -50,6 +50,7 @@ runs:
         nix print-dev-env ${{ inputs.nix_args }} > "$action_nix_dev_env_script"
          if [[ '${{ inputs.pure_env }}' == 'true' ]]; then
           compgen -e | grep -v '^action_' | while read -r var; do
+            echo "Unsetting $var"
             unset "$var"
           done
         fi
@@ -58,11 +59,16 @@ runs:
         # Save environment after loading Nix
         action_save_env "$action_after_env"
 
+        # Unset changed variables from GITHUB_ENV
+        diff "$action_before_env" "$action_after_env" | grep '^<' | sed -E 's/< ([^=]+).*/\1=""/' | tee -a "$GITHUB_ENV" || true
+
         # Find differences
-        diff "$action_before_env" "$action_after_env" | grep '^>' | sed 's/^> //' > "$action_diff_env" || true
+        diff "$action_before_env" "$action_after_env" | grep '^>' | sed 's/^> //' | tee "$action_diff_env" || true
 
         # Add changed variables to GITHUB_ENV
         while IFS='=' read -r name value; do
+          echo "$name=$value"
+
           # Unescape newlines
           unescaped_value=$(printf '%s' "$value" | sed 's/\\n/\n/g')
 
@@ -70,9 +76,6 @@ runs:
           echo "$unescaped_value" >> "$GITHUB_ENV"
           echo "EOF" >> "$GITHUB_ENV"
         done < "$action_diff_env"
-
-        echo "Environment variables added to GITHUB_ENV:"
-        cat "$action_diff_env"
 
 branding:
   icon: 'terminal'
